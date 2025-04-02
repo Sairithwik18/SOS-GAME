@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOS Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            text-align: center;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .board {
+            display: grid;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            font-weight: bold;
+            background-color: #ddd;
+            cursor: pointer;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .cell:hover {
+            background-color: #ccc;
+        }
+
+        .status {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        .scores {
+            margin-bottom: 20px;
+        }
+
+        .reset-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .reset-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .highlight-player1 {
+            background-color: #ffaaaa; /* Red for Player 1 */
+        }
+
+        .highlight-player2 {
+            background-color: #aaaaff; /* Blue for Player 2 */
+        }
+
+        .choice-buttons {
+            margin-bottom: 20px;
+        }
+
+        .choice-buttons button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #28a745;
+            color: white;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+            margin: 0 5px;
+        }
+
+        .choice-buttons button:hover {
+            background-color: #218838;
+        }
+
+        .grid-size-input {
+            margin-bottom: 20px;
+        }
+
+        .grid-size-input input {
+            padding: 5px;
+            font-size: 16px;
+            width: 60px;
+            text-align: center;
+        }
+
+        .grid-size-input button {
+            padding: 5px 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #28a745;
+            color: white;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .grid-size-input button:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SOS Game</h1>
+        <div class="grid-size-input">
+            <label for="grid-size">Grid Size (n x n): </label>
+            <input type="number" id="grid-size" min="3" value="3">
+            <button id="set-grid-size">Set Grid Size</button>
+        </div>
+        <div class="scores">
+            <span>Player 1: <span id="score-1">0</span></span> |
+            <span>Player 2: <span id="score-2">0</span></span>
+        </div>
+        <div id="board" class="board"></div>
+        <div class="choice-buttons">
+            <button id="choose-s">Choose S</button>
+            <button id="choose-o">Choose O</button>
+        </div>
+        <div id="status" class="status">Player 1's Turn</div>
+        <button id="reset" class="reset-btn">Reset Game</button>
+    </div>
+
+    <script>
+        const boardElement = document.getElementById("board");
+        const statusElement = document.getElementById("status");
+        const resetButton = document.getElementById("reset");
+        const score1Element = document.getElementById("score-1");
+        const score2Element = document.getElementById("score-2");
+        const chooseSButton = document.getElementById("choose-s");
+        const chooseOButton = document.getElementById("choose-o");
+        const gridSizeInput = document.getElementById("grid-size");
+        const setGridSizeButton = document.getElementById("set-grid-size");
+
+        let board = [];
+        let gridSize = 3; // Default grid size
+        let currentPlayer = 1; // Player 1 starts
+        let gameActive = true;
+        let score1 = 0;
+        let score2 = 0;
+        let currentChoice = null; // S or O, chosen by the player
+        let extraTurn = false; // Track if the player gets an extra turn
+        const countedSOS = new Set(); // Track which SOS sequences have been counted
+
+        // Set grid size
+        setGridSizeButton.addEventListener("click", () => {
+            const size = parseInt(gridSizeInput.value);
+            if (size >= 3) {
+                gridSize = size;
+                resetGame();
+            } else {
+                alert("Grid size must be at least 3.");
+            }
+        });
+
+        // Create the board
+        function createBoard() {
+            board = Array(gridSize * gridSize).fill(null); // Initialize the board
+            boardElement.innerHTML = "";
+            boardElement.style.gridTemplateColumns = `repeat(${gridSize}, 50px)`;
+            boardElement.style.gridTemplateRows = `repeat(${gridSize}, 50px)`;
+            for (let i = 0; i < gridSize * gridSize; i++) {
+                const cell = document.createElement("div");
+                cell.classList.add("cell");
+                cell.dataset.index = i;
+                cell.addEventListener("click", handleCellClick);
+                boardElement.appendChild(cell);
+            }
+        }
+
+        // Handle cell click
+        function handleCellClick(event) {
+            if (!gameActive || !currentChoice) return;
+
+            const cell = event.target;
+            const index = cell.dataset.index;
+
+            if (board[index] === null) {
+                board[index] = currentChoice;
+                cell.textContent = currentChoice;
+
+                const sosSequences = checkSOS();
+                if (sosSequences.length > 0) {
+                    highlightSOS(sosSequences);
+                    if (currentPlayer === 1) {
+                        score1 += sosSequences.length; // Add points for each SOS
+                        score1Element.textContent = score1;
+                    } else {
+                        score2 += sosSequences.length; // Add points for each SOS
+                        score2Element.textContent = score2;
+                    }
+                    statusElement.textContent = `Player ${currentPlayer} scored ${sosSequences.length} point(s)!`;
+                    extraTurn = true; // Grant one extra turn
+                } else {
+                    extraTurn = false; // No extra turn
+                }
+
+                if (board.every((cell) => cell !== null)) {
+                    gameActive = false;
+                    declareWinner();
+                } else {
+                    if (!extraTurn) {
+                        currentPlayer = currentPlayer === 1 ? 2 : 1; // Switch player if no extra turn
+                    } else {
+                        extraTurn = false; // Reset extra turn after using it
+                    }
+                    statusElement.textContent = `Player ${currentPlayer}'s Turn`;
+                    currentChoice = null; // Reset choice for the next player
+                }
+            }
+        }
+
+        // Check for SOS sequences
+        function checkSOS() {
+            const winPatterns = [];
+            // Check rows
+            for (let i = 0; i < gridSize; i++) {
+                for (let j = 0; j < gridSize - 2; j++) {
+                    winPatterns.push([i * gridSize + j, i * gridSize + j + 1, i * gridSize + j + 2]);
+                }
+            }
+            // Check columns
+            for (let i = 0; i < gridSize - 2; i++) {
+                for (let j = 0; j < gridSize; j++) {
+                    winPatterns.push([i * gridSize + j, (i + 1) * gridSize + j, (i + 2) * gridSize + j]);
+                }
+            }
+            // Check diagonals (top-left to bottom-right)
+            for (let i = 0; i < gridSize - 2; i++) {
+                for (let j = 0; j < gridSize - 2; j++) {
+                    winPatterns.push([i * gridSize + j, (i + 1) * gridSize + j + 1, (i + 2) * gridSize + j + 2]);
+                }
+            }
+            // Check diagonals (top-right to bottom-left)
+            for (let i = 0; i < gridSize - 2; i++) {
+                for (let j = 2; j < gridSize; j++) {
+                    winPatterns.push([i * gridSize + j, (i + 1) * gridSize + j - 1, (i + 2) * gridSize + j - 2]);
+                }
+            }
+
+            const sosSequences = [];
+            for (const pattern of winPatterns) {
+                const [a, b, c] = pattern;
+                const patternKey = `${a}-${b}-${c}`; // Unique key for the pattern
+                if (
+                    !countedSOS.has(patternKey) && // Ensure the pattern hasn't been counted
+                    board[a] === "S" &&
+                    board[b] === "O" &&
+                    board[c] === "S"
+                ) {
+                    sosSequences.push(pattern);
+                    countedSOS.add(patternKey); // Mark the pattern as counted
+                }
+            }
+            return sosSequences;
+        }
+
+        // Highlight SOS sequences
+        function highlightSOS(sequences) {
+            sequences.forEach((sequence) => {
+                sequence.forEach((index) => {
+                    if (currentPlayer === 1) {
+                        boardElement.children[index].classList.add("highlight-player1"); // Red for Player 1
+                    } else {
+                        boardElement.children[index].classList.add("highlight-player2"); // Blue for Player 2
+                    }
+                });
+            });
+        }
+
+        // Declare the winner
+        function declareWinner() {
+            if (score1 > score2) {
+                statusElement.textContent = "Player 1 wins!";
+            } else if (score2 > score1) {
+                statusElement.textContent = "Player 2 wins!";
+            } else {
+                statusElement.textContent = "It's a draw!";
+            }
+        }
+
+        // Reset the entire game
+        function resetGame() {
+            board = Array(gridSize * gridSize).fill(null);
+            currentPlayer = 1;
+            gameActive = true;
+            score1 = 0;
+            score2 = 0;
+            score1Element.textContent = score1;
+            score2Element.textContent = score2;
+            statusElement.textContent = "Player 1's Turn";
+            currentChoice = null;
+            extraTurn = false;
+            countedSOS.clear(); // Clear the counted SOS sequences
+            createBoard();
+        }
+
+        // Initialize the game
+        chooseSButton.addEventListener("click", () => {
+            if (currentPlayer === 1 || currentPlayer === 2) {
+                currentChoice = "S";
+                statusElement.textContent = `Player ${currentPlayer} chose S`;
+            }
+        });
+
+        chooseOButton.addEventListener("click", () => {
+            if (currentPlayer === 1 || currentPlayer === 2) {
+                currentChoice = "O";
+                statusElement.textContent = `Player ${currentPlayer} chose O`;
+            }
+        });
+
+        resetButton.addEventListener("click", resetGame);
+        createBoard(); // Initialize the board with the default grid size
+    </script>
+</body>
+</html>
